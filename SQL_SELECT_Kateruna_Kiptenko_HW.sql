@@ -13,7 +13,7 @@ WITH animation_movies AS (
 	FROM public.film f 
 	INNER JOIN public.film_category fc ON f.film_id = fc.film_id 
 	INNER JOIN public.category c ON fc.category_id = c.category_id 
-	WHERE c.name='Animation'	   
+	WHERE UPPER(c.name) = 'ANIMATION'	   
 )
 SELECT title
 FROM animation_movies
@@ -35,7 +35,7 @@ FROM (
 	FROM public.film f 
 	INNER JOIN public.film_category fc ON f.film_id = fc.film_id 
 	INNER JOIN public.category c ON fc.category_id = c.category_id 
-	WHERE c.name='Animation'	   
+	WHERE UPPER(c.name) = 'ANIMATION'	   
 ) AS animation_movies
 WHERE release_year BETWEEN 2017 AND 2019
 	AND rating IN ('G', 'PG', 'PG-13')
@@ -50,7 +50,7 @@ SELECT f.title
 FROM public.film f 
 INNER JOIN public.film_category fc ON f.film_id = fc.film_id 
 INNER JOIN public.category c ON fc.category_id = c.category_id 
-WHERE c.name='Animation'
+WHERE UPPER(c.name) = 'ANIMATION'
 	AND f.release_year BETWEEN 2017 AND 2019
 	AND f.rating IN ('G', 'PG', 'PG-13')
 	AND f.rental_rate > 1
@@ -202,17 +202,16 @@ LIMIT 5;
 
 -- CTE solution
 WITH movie_categories AS (
-	SELECT f.title
-			, f.release_year
+	SELECT f.release_year
 			, c.name
 	FROM public.film f
 	INNER JOIN public.film_category fc ON fc.film_id = f.film_id 
 	INNER JOIN public.category c ON c.category_id = fc.category_id
 )
 SELECT release_year
-		, COUNT(*) FILTER (WHERE name = 'Drama') AS number_of_drama_movies
-		, COUNT(*) FILTER (WHERE name = 'Travel') AS number_of_travel_movies
-		, COUNT(*) FILTER (WHERE name = 'Documentary') AS number_of_documentary_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'DRAMA') AS number_of_drama_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'TRAVEL') AS number_of_travel_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'DOCUMENTARY') AS number_of_documentary_movies
 FROM movie_categories
 GROUP BY release_year 
 ORDER BY release_year DESC;
@@ -224,12 +223,11 @@ ORDER BY release_year DESC;
 
 -- Subquery solution
 SELECT release_year
-		, COUNT(*) FILTER (WHERE name = 'Drama') AS number_of_drama_movies
-		, COUNT(*) FILTER (WHERE name = 'Travel') AS number_of_travel_movies
-		, COUNT(*) FILTER (WHERE name = 'Documentary') AS number_of_documentary_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'DRAMA') AS number_of_drama_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'TRAVEL') AS number_of_travel_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'DOCUMENTARY') AS number_of_documentary_movies
 FROM (
-	SELECT f.title
-			, f.release_year
+	SELECT f.release_year
 			, c.name
 	FROM public.film f
 	INNER JOIN public.film_category fc ON fc.film_id = f.film_id 
@@ -243,9 +241,9 @@ ORDER BY release_year DESC;
 
 -- JOIN solution
 SELECT f.release_year 
-		, COUNT(*) FILTER (WHERE name = 'Drama') AS number_of_drama_movies
-		, COUNT(*) FILTER (WHERE name = 'Travel') AS number_of_travel_movies
-		, COUNT(*) FILTER (WHERE name = 'Documentary') AS number_of_documentary_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'DRAMA') AS number_of_drama_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'TRAVEL') AS number_of_travel_movies
+		, COUNT(*) FILTER (WHERE UPPER(name) = 'DOCUMENTARY') AS number_of_documentary_movies
 FROM public.film f
 INNER JOIN public.film_category fc ON fc.film_id = f.film_id 
 INNER JOIN public.category c ON c.category_id = fc.category_id
@@ -281,23 +279,24 @@ WITH payments_2017 AS (
     INNER JOIN public.inventory i ON r.inventory_id = i.inventory_id
     WHERE EXTRACT(YEAR FROM p.payment_date) = 2017
 ),
-
 revenue_per_employee AS (
     SELECT staff_id
          , SUM(amount) AS total_revenue
     FROM payments_2017
     GROUP BY staff_id
 )
-SELECT r.staff_id
+SELECT s.first_name
+     , s.last_name
      , r.total_revenue
      , (
-        SELECT store_id
+        SELECT p2.store_id
         FROM payments_2017 p2
         WHERE p2.staff_id = r.staff_id
         ORDER BY p2.payment_date DESC, p2.payment_id DESC
         LIMIT 1
        ) AS the_last_store
 FROM revenue_per_employee r
+INNER JOIN public.staff s ON r.staff_id = s.staff_id
 ORDER BY r.total_revenue DESC
 LIMIT 3;
 
@@ -310,9 +309,10 @@ LIMIT 3;
  * which is the key structural advantage of this approach over the subquery solution. */
 
 -- Subquery solution
-SELECT p.staff_id
-		, SUM(p.amount) AS total_revenue,
-    	(
+SELECT s.first_name
+		, s.last_name
+		, SUM(p.amount) AS total_revenue
+		, (
         SELECT i.store_id
         FROM public.payment p2
         INNER JOIN public.rental r2 ON p2.rental_id = r2.rental_id
@@ -323,8 +323,9 @@ SELECT p.staff_id
         LIMIT 1
     	) AS last_store
 FROM public.payment p
+INNER JOIN public.staff s ON p.staff_id = s.staff_id
 WHERE EXTRACT(YEAR FROM p.payment_date) = 2017
-GROUP BY p.staff_id
+GROUP BY p.staff_id, s.first_name, s.last_name
 ORDER BY total_revenue DESC
 LIMIT 3;
 
@@ -453,7 +454,8 @@ SELECT first_name,
        last_name,
        EXTRACT(YEAR FROM current_date) - last_year AS gap
 FROM last_film_year
-ORDER BY gap DESC;
+ORDER BY gap DESC
+LIMIT 5;
 
 /* CTE pre-aggregates the latest film year per actor, then computes the gap in the outer query. */
 
@@ -471,7 +473,8 @@ FROM (
     INNER JOIN public.film f ON fa.film_id = f.film_id
     GROUP BY a.actor_id, a.first_name, a.last_name
 ) AS last_film_year
-ORDER BY gap DESC;
+ORDER BY gap DESC
+LIMIT 5;
 
 /* Subquery is structurally and semantically identical to the CTE. 
  * No reusability advantage applies since the derived table is referenced once; the choice is purely stylistic. */
@@ -484,7 +487,8 @@ FROM public.actor a
 INNER JOIN public.film_actor fa ON a.actor_id = fa.actor_id 
 INNER JOIN public.film f ON fa.film_id = f.film_id 
 GROUP BY a.actor_id, a.first_name, a.last_name
-ORDER BY gap DESC;
+ORDER BY gap DESC
+LIMIT 5;
 
 /* JOIN computes MAX(release_year) and the gap in a single aggregation step. 
  * Concise and correct, but combining the aggregation and the arithmetic in one expression makes the query marginally harder to read at a glance. */
@@ -528,7 +532,8 @@ SELECT ay1.first_name
 	    ) AS total_gap
 FROM actor_years ay1
 GROUP BY ay1.actor_id, ay1.first_name, ay1.last_name
-ORDER BY total_gap DESC;
+ORDER BY total_gap DESC
+LIMIT 5;
 
 /* CTE first builds actor_years — a deduplicated set of (actor_id, release_year) pairs, collapsing multiple films per year into a single row. 
  * The outer query then iterates over each row in that set and, for every active year ay1.release_year, fires a correlated subquery to find MIN(ay2.release_year) 
@@ -568,7 +573,8 @@ FROM (
     INNER JOIN public.film f ON fa.film_id = f.film_id
 ) ay1
 GROUP BY ay1.actor_id, ay1.first_name, ay1.last_name
-ORDER BY total_gap DESC;
+ORDER BY total_gap DESC
+LIMIT 5;
 
 /* Subquery applies identical logic but inlines the deduplication as an anonymous derived table. 
  * The correlated subquery for finding the next active year is the same in both solutions. 
