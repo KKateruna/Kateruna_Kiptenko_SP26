@@ -13,7 +13,7 @@ WITH animation_movies AS (
 	FROM public.film f 
 	INNER JOIN public.film_category fc ON f.film_id = fc.film_id 
 	INNER JOIN public.category c ON fc.category_id = c.category_id 
-	WHERE UPPER(c.name) = 'ANIMATION'	   
+	WHERE UPPER(c.name) = UPPER('Animation')	   
 )
 SELECT title
 FROM animation_movies
