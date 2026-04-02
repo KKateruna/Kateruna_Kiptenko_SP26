@@ -51,7 +51,7 @@ WITH inserted_films AS (
 	    	ARRAY['Commentaries', 'Deleted Scenes']::text[]
 	    ),
 	    ('INTERSTELLAR', 
-	    	"An epic science fiction film about humanity' extinction in the near future", 
+	    	'An epic science fiction film about extinction of humanity in the near future', 
 	    	2014, 
 	    	21, 
 	    	19.99, 
@@ -84,7 +84,7 @@ FROM (
 	    ('GONE WITH THE WIND', 'Classics'),
 	    ('INTERSTELLAR', 'Sci-Fi')
 ) AS mapping(title, cat_name)
-	INNER JOIN public.film f ON UPPER(f.title) = UPPER(mapping.title)
+	INNER JOIN inserted_films f ON UPPER(f.title) = UPPER(mapping.title)
 	INNER JOIN public.category c ON UPPER(c.name) = UPPER(mapping.cat_name) 
 ON CONFLICT (film_id, category_id) DO NOTHING
 RETURNING *;
@@ -160,7 +160,7 @@ FROM (
 	    ('MATTHEW', 'MCCONAUGHEY', 'INTERSTELLAR'),
 	    ('JESSICA', 'CHASTAIN', 'INTERSTELLAR')
 ) AS mapping(first_name, last_name, title)
-	INNER JOIN public.actor a ON UPPER(a.first_name) = UPPER(mapping.first_name)
+	INNER JOIN inserted_actors a ON UPPER(a.first_name) = UPPER(mapping.first_name)
 		AND UPPER(a.last_name) = UPPER(mapping.last_name)
 	INNER JOIN public.film f ON UPPER(f.title) = mapping.title
 ON CONFLICT (actor_id, film_id) DO NOTHING
@@ -335,7 +335,7 @@ COMMIT;
  * or add records for the first half of 2017)
  *********************************************************************************************************************************************************/
 CREATE TABLE IF NOT EXISTS payment_p2026_03 PARTITION OF public.payment
-FOR VALUES FROM ('2026-03-01 00:00:00+03') TO ('2026-04-01 00:00:00+03');
+FOR VALUES FROM ('2026-03-01 00:00:00') TO ('2026-04-01 00:00:00');
 
 -- A new partition is created to accommodate payment records dated in March 2026.
 
@@ -348,7 +348,10 @@ WITH inserted_rentals AS (
         i.inventory_id, 
         c.customer_id, 
         '2026-03-29 18:00:00'::timestamp,
-        (SELECT MIN(staff_id) FROM public.staff), -- This random choosing method was suggested by a mentor
+        (SELECT s.staff_id 
+         FROM public.staff s 
+         WHERE s.store_id = i.store_id 
+         LIMIT 1), 
         CURRENT_TIMESTAMP
     FROM (
         VALUES
