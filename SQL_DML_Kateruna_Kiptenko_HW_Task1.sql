@@ -51,7 +51,7 @@ WITH inserted_films AS (
 	    	ARRAY['Commentaries', 'Deleted Scenes']::text[]
 	    ),
 	    ('INTERSTELLAR', 
-	    	'An epic science fiction film about humanity'' extinction in the near future', 
+	    	"An epic science fiction film about humanity' extinction in the near future", 
 	    	2014, 
 	    	21, 
 	    	19.99, 
