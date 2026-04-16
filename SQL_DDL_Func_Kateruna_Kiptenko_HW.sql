@@ -220,11 +220,15 @@ BEGIN
 		      AND r2.return_date IS NULL
 		  )
 		ORDER BY f.film_id, r.rental_date DESC
-	) res;
-
-	IF NOT FOUND THEN
-		RAISE NOTICE 'No movies found for pattern %.', target_title;
-	END IF;
+	LOOP
+		v_num            := v_num + 1;
+		"Row number"     := v_num;
+		"Film title"     := v_row.title;
+		"Language"       := v_row.lang_name;
+		"Customer name"  := v_row.cust_name;
+		"Rental date"    := v_row.last_rental;
+		RETURN NEXT;
+	END LOOP;
 END; 
 $$
 LANGUAGE plpgsql;
