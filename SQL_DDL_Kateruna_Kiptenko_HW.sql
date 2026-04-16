@@ -286,7 +286,7 @@ CHECK (job_title IN ('Developer', 'Analyst', 'Manager', 'Designer'));
 /****************************************** Adding record_ts ******************************************/
 
 ALTER TABLE recruitment.people DROP COLUMN IF EXISTS record_ts;
-ALTER TABLE recruitment.people ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE recruitment.people ADD COLUMN record_ts TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE recruitment.companies DROP COLUMN IF EXISTS record_ts;
 ALTER TABLE recruitment.companies ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
