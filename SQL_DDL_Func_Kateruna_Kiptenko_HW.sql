@@ -186,6 +186,9 @@ RETURNS TABLE ("Row number" BIGINT,
 			   "Customer name" TEXT,
 			   "Rental date" TIMESTAMPTZ)
 AS $$
+DECLARE
+	v_row   RECORD;
+	v_num   BIGINT := 0;
 BEGIN 
 	IF NOT EXISTS (
 		SELECT 1
