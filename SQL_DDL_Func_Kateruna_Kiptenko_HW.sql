@@ -131,7 +131,7 @@ BEGIN
 	INNER JOIN public.address a ON c.address_id = a.address_id
 	INNER JOIN public.city ON a.city_id = city.city_id
 	INNER JOIN public.country ON city.country_id = country.country_id
-	WHERE country.country = ANY(countries)
+	WHERE UPPER() = ANY(SELECT UPPER(x) FROM UNNEST() AS x)
 	GROUP BY country.country, f.title, f.rating, l.name, f.length, f.release_year
 	ORDER BY country.country, COUNT(*) DESC, f.title ASC;
 END; 
