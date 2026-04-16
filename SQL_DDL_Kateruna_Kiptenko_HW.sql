@@ -422,12 +422,12 @@ FROM (VALUES
     ('FinServ Group', 'Kyiv', 'Analyst', 'Financial Analyst role', 38000),
     ('MediaHub', NULL, 'Developer', 'Remote DevOps role', 52000)
 ) AS v(company_name, location_name, job_title, job_description, salary)
-JOIN recruitment.companies c ON c.company_name = v.company_name
-LEFT JOIN recruitment.locations l ON l.location_name = v.location_name
+JOIN recruitment.companies c ON UPPER(c.company_name) = UPPER(v.company_name)
+LEFT JOIN recruitment.locations l ON UPPER(l.location_name) = UPPER(v.location_name)
 WHERE NOT EXISTS (
     SELECT 1 FROM recruitment.jobs j
     WHERE j.company_id = c.company_id
-      AND j.job_title = v.job_title
+      AND UPPER(j.job_title) = UPPER(v.job_title)
       AND COALESCE(j.salary,0) = COALESCE(v.salary,0)
 )
 RETURNING *;
