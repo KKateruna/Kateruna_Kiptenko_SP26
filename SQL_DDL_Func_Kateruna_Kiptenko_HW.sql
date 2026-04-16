@@ -187,13 +187,22 @@ RETURNS TABLE ("Row number" BIGINT,
 			   "Rental date" TIMESTAMPTZ)
 AS $$
 BEGIN 
-	RETURN QUERY
-	SELECT ROW_NUMBER() OVER() AS row_num,
-		   res.title,
-		   res.lang_name,
-		   res.cust_name,
-		   res.last_rental
-	FROM (
+	IF NOT EXISTS (
+		SELECT 1
+		FROM public.film f
+		INNER JOIN public.inventory i ON f.film_id = i.film_id
+		WHERE f.title ILIKE target_title
+		AND NOT EXISTS (
+			SELECT 1 FROM public.rental r2
+			WHERE r2.inventory_id = i.inventory_id
+			AND r2.return_date IS NULL
+		)
+	) THEN
+		RAISE NOTICE 'No movies found for pattern %.', target_title;
+		RETURN;
+	END IF;
+
+	FOR v_row IN
 		SELECT DISTINCT ON (f.film_id)
 			   f.title,
 			   l.name AS lang_name,
