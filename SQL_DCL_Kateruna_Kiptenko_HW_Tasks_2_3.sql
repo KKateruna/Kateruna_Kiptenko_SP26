@@ -77,11 +77,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-GRANT SELECT ON rental, film, inventory, customer, staff, store, address TO rental; -- forced permissions to be able to use the function
-GRANT USAGE, SELECT ON SEQUENCE rental_rental_id_seq TO rental;
+GRANT SELECT ON public.rental, 
+				public.film, 
+				public.inventory, 
+				public.customer, 
+				public.staff, 
+				public.store, 
+				public.address 
+TO rental; -- forced permissions to be able to use the function
+GRANT USAGE, SELECT ON SEQUENCE public.rental_rental_id_seq TO rental;
 GRANT EXECUTE ON FUNCTION public.new_rental TO rental;
 
-SET ROLE rental; -- demonstrate successful access
+SET ROLE rentaluser; -- demonstrate successful access via inherited group role
 
 SELECT * FROM public.new_rental(
     '2026-04-16 10:00:00', 
@@ -157,6 +164,10 @@ ALTER TABLE public.customer ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rental ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE public.customer FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.rental FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.payment FORCE ROW LEVEL SECURITY;
+
 -- Policy for Customer table
 DROP POLICY IF EXISTS customer_policy ON public.customer;
 CREATE POLICY customer_policy ON public.customer TO customer
@@ -180,18 +191,22 @@ USING (EXISTS (
     AND ('client_' || LOWER(c.first_name) || '_' || LOWER(c.last_name)) = current_role
 ));
 
-SELECT customer_id -- finding customer_id for Pearl Garza
-FROM public.customer 
-WHERE LOWER(first_name) = 'pearl' AND LOWER(last_name) = 'garza';
+SET ROLE client_pearl_garza; 
 
-SET ROLE client_pearl_garza; -- all rows received have the value customer_id 224
+SELECT c.customer_id -- verify which customer_id is mapped to the current role
+FROM public.customer c
+WHERE ('client_' || LOWER(c.first_name) || '_' || LOWER(c.last_name)) = current_role;
 
-SELECT * FROM public.rental;
+SELECT * FROM public.rental; -- all rows received have the value customer_id 224
 SELECT * FROM public.payment;
 
-SELECT * -- no records
+SELECT * 
 FROM public.rental
-WHERE customer_id <> 224;
+WHERE customer_id = (
+	SELECT c.customer_id 
+	FROM public.customer c
+	WHERE ('client_' || LOWER(c.first_name) || '_' || LOWER(c.last_name)) = current_role
+);
 
 RESET ROLE;
 /* So after setting the role to client_pearl_garza, the user can successfully access only her own records in the rental and payment tables.
