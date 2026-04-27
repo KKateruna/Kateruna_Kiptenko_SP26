@@ -17,12 +17,14 @@
 
 CREATE SCHEMA IF NOT EXISTS museum;
 
+CREATE EXTENSION IF NOT EXISTS citext;
+
 CREATE TABLE IF NOT EXISTS museum.visitors (
 	visitor_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 	first_name VARCHAR(50) NOT NULL,
 	last_name VARCHAR(50) NOT NULL,
 	full_name VARCHAR(101) GENERATED ALWAYS AS (first_name || ' ' || last_name) STORED, -- fulfills the requirement to use STORED
-	email VARCHAR(100) UNIQUE NOT NULL,
+	email CITEXT UNIQUE NOT NULL,
 	phone_number VARCHAR(20) UNIQUE NOT NULL
 	);
 
@@ -48,7 +50,7 @@ CREATE TABLE IF NOT EXISTS museum.guides (
 	first_name VARCHAR(50) NOT NULL,
 	last_name VARCHAR(50) NOT NULL,
 	full_name VARCHAR(101) GENERATED ALWAYS AS (first_name || ' ' || last_name) STORED, -- fulfills the requirement to use STORED
-	email VARCHAR(100) UNIQUE NOT NULL,
+	email CITEXT UNIQUE NOT NULL,
 	phone_number VARCHAR(20) UNIQUE NOT NULL
 	);
 
@@ -77,7 +79,7 @@ CREATE TABLE IF NOT EXISTS museum.items (
 	item_name VARCHAR(100) NOT NULL,
 	item_description TEXT,
 	type_id SMALLINT NOT NULL,
-	creation_year SMALLINT
+	creation_year SMALLINT -- may have a negative meaning for the period BC
 	);
 
 CREATE TABLE IF NOT EXISTS museum.item_types (
@@ -138,7 +140,7 @@ ALTER TABLE museum.exhibitions ADD CONSTRAINT exhibition_date_2026 CHECK (start_
 ALTER TABLE museum.inventory DROP CONSTRAINT IF EXISTS inventory_location;
 ALTER TABLE museum.inventory
 ADD CONSTRAINT inventory_location
-CHECK (location IN ('Hall A', 'Hall B', 'Hall C', 'Storage', 'Restoration Room'));
+CHECK (UPPER(location) IN ('HALL A', 'HALL B', 'HALL C', 'STORAGE', 'RESTORATION ROOM'));
 
 -- TASK 4 ---------------------------------------------------------------------------------------------------------------
 /* Populate the tables with the sample data generated, ensuring each table has at least 6+ rows 
@@ -234,7 +236,7 @@ VALUES
 	)
 ) AS records(exhibition_name, exhibition_description, start_date, end_date, is_online)
 WHERE NOT EXISTS (
-    SELECT 1 FROM museum.exhibitions e WHERE e.exhibition_name = records.exhibition_name
+    SELECT 1 FROM museum.exhibitions e WHERE UPPER(e.exhibition_name) = UPPER(records.exhibition_name)
 )
 RETURNING *;
 
@@ -250,7 +252,7 @@ FROM (VALUES
     ('sophia.b@email.com', 'History and Science Through Time', '2026-04-23 18:09:41', 15)
 ) AS records(email, exhibition_name, visit_date, total_price)
 JOIN museum.visitors v ON v.email = records.email
-JOIN museum.exhibitions e ON e.exhibition_name = records.exhibition_name
+JOIN museum.exhibitions e ON UPPER(e.exhibition_name) = UPPER(records.exhibition_name)
 WHERE NOT EXISTS (
     SELECT 1 FROM museum.visits visit
     WHERE visit.visitor_id = v.visitor_id
@@ -260,18 +262,23 @@ WHERE NOT EXISTS (
 RETURNING *;
 
 -- EXHIBITION GUIDES
+WITH mapping(exhibition_name, email) AS (
+    VALUES
+    ('Masterpieces of World Art', 'j.anderson@museum.org'),
+    ('Masterpieces of World Art', 'l.taylor@museum.org'),
+    ('Masterpieces of World Art', 'w.thomas@museum.org'),
+    ('History and Science Through Time', 'b.moore@museum.org'),
+    ('History and Science Through Time', 'r.jackson@museum.org'),
+    ('History and Science Through Time', 's.white@museum.org')
+)
 INSERT INTO museum.exhibition_guides (exhibition_id, guide_id)
 SELECT e.exhibition_id, g.guide_id
-FROM museum.exhibitions e
-INNER JOIN museum.guides g
-    ON (e.exhibition_name = 'Masterpieces of World Art' AND g.email = 'j.anderson@museum.org')
-    OR (e.exhibition_name = 'Masterpieces of World Art' AND g.email = 'l.taylor@museum.org')
-    OR (e.exhibition_name = 'Masterpieces of World Art' AND g.email = 'w.thomas@museum.org')
-    OR (e.exhibition_name = 'History and Science Through Time' AND g.email = 'b.moore@museum.org')
-    OR (e.exhibition_name = 'History and Science Through Time' AND g.email = 'r.jackson@museum.org')
-    OR (e.exhibition_name = 'History and Science Through Time' AND g.email = 's.white@museum.org')
+FROM mapping m
+JOIN museum.exhibitions e ON UPPER(e.exhibition_name) = UPPER(m.exhibition_name)
+JOIN museum.guides g ON g.email = m.email
 WHERE NOT EXISTS (
-    SELECT 1 FROM museum.exhibition_guides eg 
+    SELECT 1 
+    FROM museum.exhibition_guides eg 
     WHERE eg.exhibition_id = e.exhibition_id
       AND eg.guide_id = g.guide_id
 )
@@ -307,12 +314,12 @@ VALUES
 	('Mona Lisa', 'Portrait by Leonardo da Vinci', 1, 1503),
 	('David', 'Marble sculpture by Michelangelo', 2, 1504),
 	('The Last Supper Sketches', 'Preparatory drawings for The Last Supper', 1, 1495),
-	('Rosetta Stone', 'Ancient Egyptian stone used to decipher hieroglyphs', 4, -196),
+	('Rosetta Stone', 'Ancient Egyptian stone used to decipher hieroglyphs', 4, -196), 
 	('Apollo 11 Command Module Model', 'Replica of the spacecraft used in Apollo 11 mission', 15, 1969),
 	('Antikythera Mechanism', 'Ancient Greek analog computer used to predict astronomical positions', 15, -100)
 ) AS records(item_name, item_description, type_id, creation_year)
 WHERE NOT EXISTS (
-    SELECT 1 FROM museum.items i WHERE i.item_name = records.item_name
+    SELECT 1 FROM museum.items i WHERE UPPER(i.item_name) = UPPER(records.item_name)
 )
 RETURNING *;
 
@@ -327,25 +334,32 @@ FROM (VALUES
 	('Apollo 11 Command Module Model', 'Hall C'),
 	('Antikythera Mechanism', 'Hall C')
 ) AS records(item_name, location)
-INNER JOIN museum.items i ON i.item_name = records.item_name
+INNER JOIN museum.items i ON UPPER(i.item_name) = UPPER(records.item_name)
 WHERE NOT EXISTS (
     SELECT 1 FROM museum.inventory inv WHERE inv.item_id = i.item_id
 )
 RETURNING *;
 
 -- EXHIBITION ITEMS
+WITH mapping(exhibition_name, item_name) AS (
+    VALUES
+    ('Masterpieces of World Art', 'Mona Lisa'),
+    ('Masterpieces of World Art', 'David'),
+    ('Masterpieces of World Art', 'The Last Supper Sketches'),
+    ('History and Science Through Time', 'Rosetta Stone'),
+    ('History and Science Through Time', 'Apollo 11 Command Module Model'),
+    ('History and Science Through Time', 'Antikythera Mechanism')
+)
 INSERT INTO museum.exhibition_items (exhibition_id, item_id)
 SELECT e.exhibition_id, i.item_id
-FROM museum.exhibitions e
-INNER JOIN museum.items i
-    ON (e.exhibition_name = 'Masterpieces of World Art' AND i.item_name = 'Mona Lisa')
-    OR (e.exhibition_name = 'Masterpieces of World Art' AND i.item_name = 'David')
-    OR (e.exhibition_name = 'Masterpieces of World Art' AND i.item_name = 'The Last Supper Sketches')
-    OR (e.exhibition_name = 'History and Science Through Time' AND i.item_name = 'Rosetta Stone')
-    OR (e.exhibition_name = 'History and Science Through Time' AND i.item_name = 'Apollo 11 Command Module Model')
-    OR (e.exhibition_name = 'History and Science Through Time' AND i.item_name = 'Antikythera Mechanism')
+FROM mapping m
+JOIN museum.exhibitions e 
+    ON UPPER(e.exhibition_name) = UPPER(m.exhibition_name)
+JOIN museum.items i 
+    ON UPPER(i.item_name) = UPPER(m.item_name)
 WHERE NOT EXISTS (
-    SELECT 1 FROM museum.exhibition_items ei
+    SELECT 1 
+    FROM museum.exhibition_items ei
     WHERE ei.exhibition_id = e.exhibition_id
       AND ei.item_id = i.item_id
 )
@@ -369,13 +383,13 @@ CREATE OR REPLACE FUNCTION museum.update_exhibition_data(
 RETURNS VOID 
 AS $$
 BEGIN
-    IF p_column_name NOT IN ('exhibition_name', 'exhibition_description', 'start_date', 'end_date', 'is_online') THEN
+    IF LOWER(p_column_name) NOT IN ('exhibition_name', 'exhibition_description', 'start_date', 'end_date', 'is_online') THEN
         RAISE EXCEPTION 'Column % cannot be updated or does not exist', p_column_name;
     END IF;
 
     EXECUTE format(
         'UPDATE museum.exhibitions SET %I = %L WHERE exhibition_id = %s',
-        p_column_name, 
+        LOWER(p_column_name), 
         p_new_value, 
         p_exhibition_id
     );
@@ -420,7 +434,7 @@ BEGIN
 
     SELECT exhibition_id INTO v_exhibition_id 
     FROM museum.exhibitions 
-    WHERE exhibition_name = p_exhibition_name;
+    WHERE UPPER(exhibition_name) = UPPER(p_exhibition_name);
 
     IF v_exhibition_id IS NULL THEN
         RAISE EXCEPTION 'Exhibition % not found', p_exhibition_name;
