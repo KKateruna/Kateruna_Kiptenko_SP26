@@ -33,15 +33,15 @@ CREATE TABLE IF NOT EXISTS museum.visits (
 	visitor_id BIGINT NOT NULL, 
 	exhibition_id BIGINT NOT NULL,
 	visit_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	total_price NUMERIC(8, 2) CHECK(total_price >= 0)
+	total_price NUMERIC(8, 2)
 	);
 
 CREATE TABLE IF NOT EXISTS museum.exhibitions (
 	exhibition_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-	exhibition_name VARCHAR(100) NOT NULL,
+	exhibition_name VARCHAR(100) UNIQUE NOT NULL,
 	exhibition_description TEXT,
 	start_date DATE NOT NULL,
-	end_date DATE NOT NULL CHECK(end_date > start_date),
+	end_date DATE NOT NULL,
 	is_online BOOLEAN NOT NULL DEFAULT FALSE
 	);
 
@@ -128,19 +128,32 @@ ALTER TABLE museum.items DROP CONSTRAINT IF EXISTS fk_item_type;
 ALTER TABLE museum.items
 ADD CONSTRAINT fk_item_type
 FOREIGN KEY (type_id) REFERENCES museum.item_types(type_id);
-/*******************************************   Adding specific constraints   *******************************************/
+/************************************************   Adding constraints   ************************************************/
 -- Time
-ALTER TABLE museum.visits DROP CONSTRAINT IF EXISTS visit_date_2026;
-ALTER TABLE museum.visits ADD CONSTRAINT visit_date_2026 CHECK (visit_date >= '2026-01-01');
+ALTER TABLE museum.visits DROP CONSTRAINT IF EXISTS chk_valid_visit_date;
+ALTER TABLE museum.visits ADD CONSTRAINT chk_valid_visit_date CHECK (visit_date >= '2026-01-01');
 
-ALTER TABLE museum.exhibitions DROP CONSTRAINT IF EXISTS exhibition_date_2026;
-ALTER TABLE museum.exhibitions ADD CONSTRAINT exhibition_date_2026 CHECK (start_date >= '2026-01-01');
+ALTER TABLE museum.exhibitions DROP CONSTRAINT IF EXISTS chk_valid_exhibition_start_date;
+ALTER TABLE museum.exhibitions ADD CONSTRAINT chk_valid_exhibition_start_date CHECK (start_date >= '2026-01-01');
+
+ALTER TABLE museum.exhibitions DROP CONSTRAINT IF EXISTS chk_valid_exhibition_end_date;
+ALTER TABLE museum.exhibitions ADD CONSTRAINT chk_valid_exhibition_end_date CHECK (end_date > start_date);
+
+ALTER TABLE museum.items DROP CONSTRAINT IF EXISTS chk_valid_creation_year;
+ALTER TABLE museum.items
+ADD CONSTRAINT chk_valid_creation_year
+CHECK (creation_year IS NULL OR creation_year <= EXTRACT(YEAR FROM CURRENT_DATE)::SMALLINT);
 
 -- Value from predefined set
-ALTER TABLE museum.inventory DROP CONSTRAINT IF EXISTS inventory_location;
+ALTER TABLE museum.inventory DROP CONSTRAINT IF EXISTS chk_inventory_location;
 ALTER TABLE museum.inventory
-ADD CONSTRAINT inventory_location
+ADD CONSTRAINT chk_inventory_location
 CHECK (UPPER(location) IN ('HALL A', 'HALL B', 'HALL C', 'STORAGE', 'RESTORATION ROOM'));
+
+-- Non-negative price
+ALTER TABLE museum.visits DROP CONSTRAINT IF EXISTS chk_positive_price;
+ALTER TABLE museum.visits
+ADD CONSTRAINT chk_positive_price CHECK (total_price >= 0);
 
 -- TASK 4 ---------------------------------------------------------------------------------------------------------------
 /* Populate the tables with the sample data generated, ensuring each table has at least 6+ rows 
@@ -366,15 +379,12 @@ WHERE NOT EXISTS (
 RETURNING *;
 
 -- TASK 5 ---------------------------------------------------------------------------------------------------------------
+/************************************************   Creating functions   ************************************************/
 /* Create a function that updates data in one of your tables. This function should take the following input arguments:
  * The primary key value of the row you want to update
  * The name of the column you want to update
  * The new value you want to set for the specified column
  * This function should be designed to modify the specified row in the table, updating the specified column with the new value. */
-
-
-/************************************************   Creating functions   ************************************************/
-
 CREATE OR REPLACE FUNCTION museum.update_exhibition_data(
     p_exhibition_id BIGINT,
     p_column_name TEXT,
@@ -388,11 +398,10 @@ BEGIN
     END IF;
 
     EXECUTE format(
-        'UPDATE museum.exhibitions SET %I = %L WHERE exhibition_id = %s',
-        LOWER(p_column_name), 
-        p_new_value, 
-        p_exhibition_id
-    );
+        'UPDATE museum.exhibitions SET %I = $1 WHERE exhibition_id = $2',
+        LOWER(p_column_name)
+    ) 
+    USING p_new_value, p_exhibition_id;
 
     RAISE NOTICE 'Exhibition % updated: % is now %', p_exhibition_id, p_column_name, p_new_value;
 
@@ -472,15 +481,13 @@ SELECT museum.new_visit(
 CREATE OR REPLACE VIEW museum.analytics_last_qtr AS 
 WITH last_quarter_info AS (
     SELECT 
-        EXTRACT(YEAR FROM visit_date) AS target_year,
-        EXTRACT(QUARTER FROM visit_date) AS target_qtr
+        DATE_TRUNC('quarter', MAX(visit_date)) AS q_start,
+        DATE_TRUNC('quarter', MAX(visit_date)) + INTERVAL '3 months' AS q_end
     FROM museum.visits
-    ORDER BY visit_date DESC
-    LIMIT 1
 )
 SELECT 
-    lq.target_year,
-    lq.target_qtr,
+    EXTRACT(YEAR FROM lq.q_start)::INT AS target_year,
+    EXTRACT(QUARTER FROM lq.q_start)::INT AS target_qtr,
     -- Total revenue
     SUM(v.total_price) AS total_revenue,
     -- How many total exhibitions were held this quarter?
@@ -496,9 +503,9 @@ SELECT
 FROM museum.visits v
 CROSS JOIN last_quarter_info lq
 WHERE 
-    EXTRACT(YEAR FROM v.visit_date) = lq.target_year
-    AND EXTRACT(QUARTER FROM v.visit_date) = lq.target_qtr
-GROUP BY lq.target_year, lq.target_qtr;
+    v.visit_date >= lq.q_start
+    AND v.visit_date < lq.q_end
+GROUP BY lq.q_start;
 
 SELECT * FROM museum.analytics_last_qtr;
 
